@@ -1,5 +1,6 @@
 from flask import Flask,jsonify,request
-from models import db,Product,Sales,Purchases
+from flask_jwt_extended import JWTManager,create_access_token, jwt_required
+from models import db,Product,Sales,Purchases,User
 
 app = Flask(__name__)
 
@@ -7,16 +8,15 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:kimysada6@localhost:5432/flask_api'
 db.init_app(app)
 
-myproducts = []
-mysales = []
-myusers = []
-mypurchases = []
+jwt = JWTManager(app)
+app.config["JWT_SECRET_KEY"] = "my_super_secret_key_123!@#randomlongstring"
 
 @app.route("/", methods=["GET"] )
 def home():
     return jsonify({"Flask API" : "1.0"}), 200
 
 @app.route("/products", methods=["GET","POST"] )
+@jwt_required()
 def products():
     if request.method == "GET":
         myproducts = Product.query.all() 
@@ -105,6 +105,47 @@ def purchases():
     else:
         error = {"message": "Method not allowed"}
         return jsonify(error), 405
+
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.get_json()
+    new_user = User(
+        username=data['username'],
+        password=data['password'],
+        email=data['email']
+    )
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify({"message": "User registered successfully"}), 201
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+
+    # Validate JSON body
+    if not data or "email" not in data or "password" not in data:
+        return jsonify({"error": "Email and password required"}), 400
+
+    # Query user using email only (safer + avoids weird query issues)
+    usr = User.query.filter_by(email=data["email"]).first()
+
+    # Check credentials manually
+    if usr is None or usr.password != data["password"]:
+        return jsonify({"error": "Invalid email or password"}), 401
+
+    # Create token using user.id or email
+    token = create_access_token(identity=data["email"])
+
+    return jsonify({"token": token}), 200
+
+    # usr = User.query.filter_by(email=data["email"], password=data["password"]).first() 
+    # if usr is None:
+    #     error = {"error": "Invalid email or password"}
+    #     return jsonify(error), 401
+    # else:
+    #     token = create_access_token(identity = data["email"])
+    #     return jsonify({"token": token}), 200 
 
 
 
