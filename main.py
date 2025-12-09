@@ -1,9 +1,11 @@
 from flask import Flask,jsonify,request
 from flask_jwt_extended import JWTManager,create_access_token, jwt_required
+from flask_cors import CORS
 from models import db,Product,Sales,Purchases,User
+from sqlalchemy import func
 
 app = Flask(__name__)
-
+CORS(app)
 # Initialize SQLAlchemy
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:kimysada6@localhost:5432/flask_api'
 db.init_app(app)
@@ -146,6 +148,31 @@ def login():
     # else:
     #     token = create_access_token(identity = data["email"])
     #     return jsonify({"token": token}), 200 
+
+@app.route("/dashboard", methods=["GET"])
+def dashboard():
+    if request.method == "GET":
+        remaining_stock_query =(
+            db.session.query(
+                Product.id,
+                Product.name,
+                (func.coalesce(func.sum(Purchases.stock_quantity), 0) - func.coalesce(func.sum(Sales.quantity), 0)).label('remaining_stock')
+            )
+            .outerjoin(Purchases, Product.id == Purchases.product_id)
+            .outerjoin(Sales, Product.id == Sales.product_id)
+            .group_by(Product.id, Product.name)
+        )
+    result = remaining_stock_query.all()
+    print(result)
+    data = []
+    labels = []
+    for r in result:
+        data.append(r.remaining_stock)
+        labels.append(r.name)
+        return jsonify({"data": data, "labels": labels}), 200
+    else:
+        error = {"message": "Method not allowed"}
+        return jsonify(error), 405
 
 
 
