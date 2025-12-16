@@ -156,6 +156,18 @@ def login():
     #     token = create_access_token(identity = data["email"])
     #     return jsonify({"token": token}), 200 
 
+
+@app.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    data = request.get_json()
+    usr = User.query.filter_by(email=data["email"]).first() 
+    if usr is None:
+            error = {"error": "Email not found"}
+            return jsonify(error), 404
+    else:
+            # In a real application, you would send an email with a reset link here
+            return jsonify({"message": "Password reset link has been sent to your email"}), 200
+
 @app.route("/dashboard", methods=["GET"])
 def dashboard():
     if request.method == "GET":
