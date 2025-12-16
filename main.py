@@ -1,3 +1,4 @@
+import sentry_sdk
 from flask import Flask,jsonify,request
 from flask_jwt_extended import JWTManager,create_access_token, jwt_required
 from flask_cors import CORS
@@ -6,6 +7,12 @@ from sqlalchemy import func
 
 app = Flask(__name__)
 CORS(app)
+sentry_sdk.init(
+    dsn="https://faea4559ae3cf05796ed8beab458acc6@o4510538954047488.ingest.de.sentry.io/4510538964992080",
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+)
 # Initialize SQLAlchemy
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:kimysada6@localhost:5432/flask_api'
 db.init_app(app)
@@ -156,20 +163,28 @@ def dashboard():
             db.session.query(
                 Product.id,
                 Product.name,
-                (func.coalesce(func.sum(Purchases.stock_quantity), 0) - func.coalesce(func.sum(Sales.quantity), 0)).label('remaining_stock')
-            )
+                (
+                    func.coalesce(func.sum(Purchases.stock_quantity), 0) - 
+                    func.coalesce(func.sum(Sales.quantity), 0)
+                    ).label('remaining_stock')
+                )
             .outerjoin(Purchases, Product.id == Purchases.product_id)
             .outerjoin(Sales, Product.id == Sales.product_id)
             .group_by(Product.id, Product.name)
         )
     result = remaining_stock_query.all()
-    print(result)
+    print("DEBUG RESULT:", result)
     data = []
     labels = []
     for r in result:
-        data.append(r.remaining_stock)
+        if not r.name:  # skip empty product names
+            continue
+        data.append(max(r.remaining_stock,0))
         labels.append(r.name)
-        return jsonify({"data": data, "labels": labels}), 200
+        return jsonify({
+            "data": data, 
+            "labels": labels
+            }), 200
     else:
         error = {"message": "Method not allowed"}
         return jsonify(error), 405
